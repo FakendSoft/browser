@@ -290,8 +290,13 @@
   }
 
   self.blankPageDragOverlayView.frame = self.containerView.bounds;
-  self.blankPageDragOverlayView.hidden = ![self.displayURL isEqualToString:@"about:blank"];
-  [self.containerView addSubview:self.blankPageDragOverlayView positioned:NSWindowAbove relativeTo:nil];
+  BOOL shouldShowOverlay = [self.displayURL isEqualToString:@"about:blank"];
+  if (shouldShowOverlay) {
+    self.blankPageDragOverlayView.hidden = NO;
+    [self.containerView addSubview:self.blankPageDragOverlayView positioned:NSWindowAbove relativeTo:nil];
+  } else {
+    [self.blankPageDragOverlayView removeFromSuperview];
+  }
 }
 
 - (NSString *)normalizedURLString:(NSString *)urlString {

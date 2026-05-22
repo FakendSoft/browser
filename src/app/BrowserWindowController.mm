@@ -315,7 +315,6 @@ BOOL WindowPointIsInsideView(NSView *view, NSPoint windowPoint) {
   window.titlebarAppearsTransparent = YES;
   window.backgroundColor = NSColor.blackColor;
   window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
-  window.movableByWindowBackground = YES;
   window.minSize = NSMakeSize(760, 460);
 
   self = [super initWithWindow:window];
@@ -370,7 +369,7 @@ BOOL WindowPointIsInsideView(NSView *view, NSPoint windowPoint) {
 }
 
 - (void)buildInterface {
-  self.rootView = [[WindowDragView alloc] initWithFrame:self.window.contentView.bounds];
+  self.rootView = [[NSView alloc] initWithFrame:self.window.contentView.bounds];
   self.rootView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   self.rootView.wantsLayer = YES;
   self.rootView.layer.backgroundColor = NSColor.blackColor.CGColor;

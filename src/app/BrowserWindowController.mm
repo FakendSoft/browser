@@ -4,12 +4,15 @@
 
 namespace {
 constexpr CGFloat kToolbarHeight = 42.0;
-constexpr CGFloat kTabWidth = 168.0;
-constexpr CGFloat kTabStripWidth = 408.0;
 constexpr CGFloat kButtonSize = 28.0;
 constexpr CGFloat kToolbarButtonY = 7.0;
 constexpr CGFloat kWindowControlsReservedWidth = 84.0;
 constexpr CGFloat kToolbarGap = 8.0;
+constexpr CGFloat kToolbarSidePadding = 12.0;
+constexpr CGFloat kLocationFieldMinWidth = 260.0;
+constexpr CGFloat kLocationFieldMaxWidth = 560.0;
+constexpr CGFloat kTabStripMinWidth = 120.0;
+constexpr CGFloat kWindowControlOffset = 5.0;
 }
 
 @interface BrowserWindow : NSWindow
@@ -40,7 +43,11 @@ constexpr CGFloat kToolbarGap = 8.0;
 
 @property(nonatomic, strong) NSView *rootView;
 @property(nonatomic, strong) NSView *toolbarView;
+@property(nonatomic, strong) NSButton *backButton;
+@property(nonatomic, strong) NSButton *forwardButton;
+@property(nonatomic, strong) NSButton *reloadButton;
 @property(nonatomic, strong) NSStackView *tabStrip;
+@property(nonatomic, strong) NSButton *addTabButton;
 @property(nonatomic, strong) NSTextField *locationField;
 @property(nonatomic, strong) NSView *browserHostView;
 @property(nonatomic, strong) NSMutableArray<BrowserTab *> *tabs;
@@ -49,6 +56,7 @@ constexpr CGFloat kToolbarGap = 8.0;
 @property(nonatomic) BOOL didCreateInitialTabs;
 @property(nonatomic) BOOL updatingLocationField;
 @property(nonatomic) BOOL closingWindow;
+@property(nonatomic) BOOL didOffsetWindowControls;
 
 @end
 
@@ -87,6 +95,7 @@ constexpr CGFloat kToolbarGap = 8.0;
 
 - (void)showWindow:(id)sender {
   [super showWindow:sender];
+  [self offsetWindowControlsIfNeeded];
   [self createInitialTabsIfNeeded];
 }
 
@@ -100,13 +109,18 @@ constexpr CGFloat kToolbarGap = 8.0;
   self.closingWindow = YES;
 }
 
+- (void)windowDidResize:(NSNotification *)notification {
+  (void)notification;
+  [self layoutToolbarControls];
+}
+
 - (void)createInitialTabsIfNeeded {
   if (self.didCreateInitialTabs) {
     return;
   }
 
   self.didCreateInitialTabs = YES;
-  [self newTabWithURL:@"https://example.com"];
+  [self newTabWithURL:@"about:blank"];
 
   NSInteger initialTabCount = [self initialTabCount];
   for (NSInteger index = 1; index < initialTabCount; index += 1) {
@@ -129,36 +143,17 @@ constexpr CGFloat kToolbarGap = 8.0;
   self.toolbarView.wantsLayer = YES;
   self.toolbarView.layer.backgroundColor = [NSColor colorWithCalibratedWhite:0.035 alpha:1.0].CGColor;
 
-  const CGFloat backButtonX = kWindowControlsReservedWidth + kToolbarGap;
-  const CGFloat forwardButtonX = backButtonX + kButtonSize + 4.0;
-  const CGFloat reloadButtonX = forwardButtonX + kButtonSize + 4.0;
-  const CGFloat tabStripX = reloadButtonX + kButtonSize + kToolbarGap;
-  const CGFloat newTabButtonX = tabStripX + kTabStripWidth + kToolbarGap;
-  const CGFloat locationFieldX = newTabButtonX + kButtonSize + kToolbarGap;
-
-  self.tabStrip = [[NSStackView alloc] initWithFrame:NSMakeRect(tabStripX,
-                                                                kToolbarButtonY,
-                                                                kTabStripWidth,
-                                                                28)];
+  self.tabStrip = [[NSStackView alloc] initWithFrame:NSZeroRect];
   self.tabStrip.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   self.tabStrip.spacing = 6.0;
-  self.tabStrip.distribution = NSStackViewDistributionGravityAreas;
+  self.tabStrip.distribution = NSStackViewDistributionFillEqually;
 
-  NSButton *backButton = [self iconButton:@"chevron.left" action:@selector(goBack:)];
-  backButton.frame = NSMakeRect(backButtonX, kToolbarButtonY, kButtonSize, kButtonSize);
-  NSButton *forwardButton = [self iconButton:@"chevron.right" action:@selector(goForward:)];
-  forwardButton.frame = NSMakeRect(forwardButtonX, kToolbarButtonY, kButtonSize, kButtonSize);
-  NSButton *reloadButton = [self iconButton:@"arrow.clockwise" action:@selector(reload:)];
-  reloadButton.frame = NSMakeRect(reloadButtonX, kToolbarButtonY, kButtonSize, kButtonSize);
-  NSButton *newTabButton = [self iconButton:@"plus" action:@selector(newTab:)];
-  newTabButton.frame = NSMakeRect(newTabButtonX, kToolbarButtonY, kButtonSize, kButtonSize);
+  self.backButton = [self iconButton:@"chevron.left" action:@selector(goBack:)];
+  self.forwardButton = [self iconButton:@"chevron.right" action:@selector(goForward:)];
+  self.reloadButton = [self iconButton:@"arrow.clockwise" action:@selector(reload:)];
+  self.addTabButton = [self iconButton:@"plus" action:@selector(newTab:)];
 
-  self.locationField = [[NSTextField alloc] initWithFrame:NSMakeRect(locationFieldX,
-                                                                     kToolbarButtonY,
-                                                                     NSWidth(self.toolbarView.bounds) -
-                                                                         locationFieldX - 12,
-                                                                     28)];
-  self.locationField.autoresizingMask = NSViewWidthSizable;
+  self.locationField = [[NSTextField alloc] initWithFrame:NSZeroRect];
   self.locationField.delegate = self;
   self.locationField.bezelStyle = NSTextFieldRoundedBezel;
   self.locationField.font = [NSFont systemFontOfSize:13 weight:NSFontWeightRegular];
@@ -174,15 +169,72 @@ constexpr CGFloat kToolbarGap = 8.0;
   self.browserHostView.wantsLayer = YES;
   self.browserHostView.layer.backgroundColor = NSColor.blackColor.CGColor;
 
-  [self.toolbarView addSubview:backButton];
-  [self.toolbarView addSubview:forwardButton];
-  [self.toolbarView addSubview:reloadButton];
+  [self.toolbarView addSubview:self.backButton];
+  [self.toolbarView addSubview:self.forwardButton];
+  [self.toolbarView addSubview:self.reloadButton];
   [self.toolbarView addSubview:self.tabStrip];
-  [self.toolbarView addSubview:newTabButton];
+  [self.toolbarView addSubview:self.addTabButton];
   [self.toolbarView addSubview:self.locationField];
   [self.rootView addSubview:self.browserHostView];
   [self.rootView addSubview:self.toolbarView];
   self.window.contentView = self.rootView;
+  [self layoutToolbarControls];
+}
+
+- (void)layoutToolbarControls {
+  const CGFloat toolbarWidth = NSWidth(self.toolbarView.bounds);
+  const CGFloat backButtonX = kWindowControlsReservedWidth + kToolbarGap;
+  const CGFloat forwardButtonX = backButtonX + kButtonSize + 4.0;
+  const CGFloat reloadButtonX = forwardButtonX + kButtonSize + 4.0;
+  const CGFloat tabStripX = reloadButtonX + kButtonSize + kToolbarGap;
+
+  CGFloat locationFieldWidth = MIN(kLocationFieldMaxWidth, toolbarWidth * 0.42);
+  locationFieldWidth = MAX(kLocationFieldMinWidth, locationFieldWidth);
+  CGFloat locationFieldX = toolbarWidth - kToolbarSidePadding - locationFieldWidth;
+  CGFloat newTabButtonX = locationFieldX - kToolbarGap - kButtonSize;
+  CGFloat tabStripWidth = newTabButtonX - kToolbarGap - tabStripX;
+
+  if (tabStripWidth < kTabStripMinWidth) {
+    tabStripWidth = kTabStripMinWidth;
+    newTabButtonX = tabStripX + tabStripWidth + kToolbarGap;
+    locationFieldX = newTabButtonX + kButtonSize + kToolbarGap;
+    locationFieldWidth = MAX(kLocationFieldMinWidth,
+                             toolbarWidth - locationFieldX - kToolbarSidePadding);
+  }
+
+  self.backButton.frame = NSMakeRect(backButtonX, kToolbarButtonY, kButtonSize, kButtonSize);
+  self.forwardButton.frame = NSMakeRect(forwardButtonX, kToolbarButtonY, kButtonSize, kButtonSize);
+  self.reloadButton.frame = NSMakeRect(reloadButtonX, kToolbarButtonY, kButtonSize, kButtonSize);
+  self.tabStrip.frame = NSMakeRect(tabStripX, kToolbarButtonY, tabStripWidth, 28.0);
+  self.addTabButton.frame = NSMakeRect(newTabButtonX, kToolbarButtonY, kButtonSize, kButtonSize);
+  self.locationField.frame = NSMakeRect(locationFieldX, kToolbarButtonY, locationFieldWidth, 28.0);
+}
+
+- (void)offsetWindowControlsIfNeeded {
+  if (self.didOffsetWindowControls) {
+    return;
+  }
+
+  NSArray<NSNumber *> *buttonTypes = @[
+    @((NSInteger)NSWindowCloseButton),
+    @((NSInteger)NSWindowMiniaturizeButton),
+    @((NSInteger)NSWindowZoomButton),
+  ];
+
+  for (NSNumber *buttonType in buttonTypes) {
+    NSButton *button = [self.window standardWindowButton:(NSWindowButton)buttonType.integerValue];
+    NSView *superview = button.superview;
+    if (!superview) {
+      continue;
+    }
+
+    NSRect frame = button.frame;
+    frame.origin.x += kWindowControlOffset;
+    frame.origin.y += superview.isFlipped ? kWindowControlOffset : -kWindowControlOffset;
+    button.frame = frame;
+  }
+
+  self.didOffsetWindowControls = YES;
 }
 
 - (NSButton *)iconButton:(NSString *)symbolName action:(SEL)action {
@@ -283,7 +335,7 @@ constexpr CGFloat kToolbarGap = 8.0;
 
   [self.tabs enumerateObjectsUsingBlock:^(BrowserTab *tab, NSUInteger index, BOOL *stop) {
     (void)stop;
-    NSButton *button = [[NSButton alloc] initWithFrame:NSMakeRect(0, 0, kTabWidth, 28)];
+    NSButton *button = [[NSButton alloc] initWithFrame:NSMakeRect(0, 0, 0, 28)];
     button.tag = static_cast<NSInteger>(index);
     button.target = self;
     button.action = @selector(selectTabButton:);
@@ -293,8 +345,9 @@ constexpr CGFloat kToolbarGap = 8.0;
     button.bezelStyle = index == static_cast<NSUInteger>(self.selectedIndex)
                             ? NSBezelStyleTexturedRounded
                             : NSBezelStyleRegularSquare;
-    [button setContentHuggingPriority:NSLayoutPriorityRequired forOrientation:NSLayoutConstraintOrientationHorizontal];
-    [button.widthAnchor constraintEqualToConstant:kTabWidth].active = YES;
+    [button setContentHuggingPriority:NSLayoutPriorityDefaultLow forOrientation:NSLayoutConstraintOrientationHorizontal];
+    [button setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow
+                                    forOrientation:NSLayoutConstraintOrientationHorizontal];
     [button.heightAnchor constraintEqualToConstant:28].active = YES;
     [self.tabStrip addArrangedSubview:button];
   }];

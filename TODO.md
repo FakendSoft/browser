@@ -108,8 +108,8 @@ decisions change.
 - [x] Smoke test: open a second tab and confirm two separate tab profile
       directories are created.
 - [x] Inspect process tree and confirm CEF helper processes are used.
-- [x] Smoke test: confirm the CEF renderer helper starts and the first page
-      reaches `Example Domain` through DevTools.
+- [x] Smoke test: confirm the CEF renderer helper starts and the first new-tab
+      page loads through DevTools.
 - [ ] Verify close/reopen tab does not leave orphan helper processes.
 
 ## Risks / Decisions To Revisit

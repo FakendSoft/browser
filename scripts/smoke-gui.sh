@@ -54,7 +54,7 @@ else
 fi
 
 for ((second = 1; second <= WAIT_SECONDS; second += 1)); do
-  if curl --max-time 2 -fsS http://127.0.0.1:9222/json 2>/dev/null | grep -q '"title": "Example Domain"'; then
+  if curl --max-time 2 -fsS http://127.0.0.1:9222/json 2>/dev/null | grep -q '"title": "New Tab"'; then
     page_loaded=1
     printf "page_loaded_at=%ss\n" "$second"
     break
@@ -85,6 +85,6 @@ if [[ "$renderer_found" != "1" ]]; then
 fi
 
 if [[ "$page_loaded" != "1" ]]; then
-  printf "Expected the initial page to load in DevTools within %s seconds.\n" "$WAIT_SECONDS" >&2
+  printf "Expected the initial new-tab page to load in DevTools within %s seconds.\n" "$WAIT_SECONDS" >&2
   exit 1
 fi

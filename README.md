@@ -49,7 +49,7 @@ flox activate -- scripts/smoke-gui.sh
 
 The smoke script starts two tabs by default and checks for two separate
 `Tab-*` profile roots, CEF helper/renderer processes, and a loaded
-`Example Domain` page through DevTools. Override `EXPECTED_TAB_COUNT` or
+`New Tab` page through DevTools. Override `EXPECTED_TAB_COUNT` or
 `INITIAL_TAB_COUNT` when you need a narrower launch check.
 
 ## Usage

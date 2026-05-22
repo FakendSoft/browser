@@ -5,8 +5,36 @@
 namespace {
 constexpr CGFloat kToolbarHeight = 42.0;
 constexpr CGFloat kTabWidth = 168.0;
+constexpr CGFloat kTabStripWidth = 408.0;
 constexpr CGFloat kButtonSize = 28.0;
+constexpr CGFloat kToolbarButtonY = 7.0;
+constexpr CGFloat kWindowControlsReservedWidth = 84.0;
+constexpr CGFloat kToolbarGap = 8.0;
 }
+
+@interface BrowserWindow : NSWindow
+
+@property(nonatomic, weak) BrowserWindowController *browserController;
+
+@end
+
+@implementation BrowserWindow
+
+- (BOOL)performKeyEquivalent:(NSEvent *)event {
+  NSEventModifierFlags modifiers =
+      event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+  NSString *characters = event.charactersIgnoringModifiers.lowercaseString;
+  if (event.type == NSEventTypeKeyDown &&
+      modifiers == NSEventModifierFlagCommand &&
+      [characters isEqualToString:@"w"]) {
+    [self.browserController closeTab:nil];
+    return YES;
+  }
+
+  return [super performKeyEquivalent:event];
+}
+
+@end
 
 @interface BrowserWindowController ()
 
@@ -18,6 +46,9 @@ constexpr CGFloat kButtonSize = 28.0;
 @property(nonatomic, strong) NSMutableArray<BrowserTab *> *tabs;
 @property(nonatomic) NSInteger selectedIndex;
 @property(nonatomic, copy) NSString *storageRoot;
+@property(nonatomic) BOOL didCreateInitialTabs;
+@property(nonatomic) BOOL updatingLocationField;
+@property(nonatomic) BOOL closingWindow;
 
 @end
 
@@ -25,15 +56,16 @@ constexpr CGFloat kButtonSize = 28.0;
 
 - (instancetype)init {
   NSRect frame = NSMakeRect(0, 0, 1280, 820);
-  NSWindow *window = [[NSWindow alloc] initWithContentRect:frame
-                                                 styleMask:NSWindowStyleMaskTitled |
-                                                           NSWindowStyleMaskClosable |
-                                                           NSWindowStyleMaskMiniaturizable |
-                                                           NSWindowStyleMaskResizable |
-                                                           NSWindowStyleMaskFullSizeContentView
-                                                   backing:NSBackingStoreBuffered
-                                                     defer:NO];
+  BrowserWindow *window = [[BrowserWindow alloc] initWithContentRect:frame
+                                                           styleMask:NSWindowStyleMaskTitled |
+                                                                     NSWindowStyleMaskClosable |
+                                                                     NSWindowStyleMaskMiniaturizable |
+                                                                     NSWindowStyleMaskResizable |
+                                                                     NSWindowStyleMaskFullSizeContentView
+                                                             backing:NSBackingStoreBuffered
+                                                               defer:NO];
   window.title = @"Fakend Browser";
+  window.titleVisibility = NSWindowTitleHidden;
   window.titlebarAppearsTransparent = YES;
   window.backgroundColor = NSColor.blackColor;
   window.minSize = NSMakeSize(760, 460);
@@ -46,15 +78,41 @@ constexpr CGFloat kButtonSize = 28.0;
   _tabs = [NSMutableArray array];
   _selectedIndex = NSNotFound;
   _storageRoot = [self applicationSupportPath];
+  window.browserController = self;
+  window.delegate = self;
   [self buildInterface];
-  [self newTabWithURL:@"https://example.com"];
 
   return self;
+}
+
+- (void)showWindow:(id)sender {
+  [super showWindow:sender];
+  [self createInitialTabsIfNeeded];
 }
 
 - (void)windowDidLoad {
   [super windowDidLoad];
   [self.window center];
+}
+
+- (void)windowWillClose:(NSNotification *)notification {
+  (void)notification;
+  self.closingWindow = YES;
+}
+
+- (void)createInitialTabsIfNeeded {
+  if (self.didCreateInitialTabs) {
+    return;
+  }
+
+  self.didCreateInitialTabs = YES;
+  [self newTabWithURL:@"https://example.com"];
+
+  NSInteger initialTabCount = [self initialTabCount];
+  for (NSInteger index = 1; index < initialTabCount; index += 1) {
+    [self newTabWithURL:@"about:blank"];
+  }
+  [self selectTabAtIndex:0];
 }
 
 - (void)buildInterface {
@@ -71,21 +129,34 @@ constexpr CGFloat kButtonSize = 28.0;
   self.toolbarView.wantsLayer = YES;
   self.toolbarView.layer.backgroundColor = [NSColor colorWithCalibratedWhite:0.035 alpha:1.0].CGColor;
 
-  self.tabStrip = [[NSStackView alloc] initWithFrame:NSMakeRect(80, 7, 520, 28)];
+  const CGFloat backButtonX = kWindowControlsReservedWidth + kToolbarGap;
+  const CGFloat forwardButtonX = backButtonX + kButtonSize + 4.0;
+  const CGFloat reloadButtonX = forwardButtonX + kButtonSize + 4.0;
+  const CGFloat tabStripX = reloadButtonX + kButtonSize + kToolbarGap;
+  const CGFloat newTabButtonX = tabStripX + kTabStripWidth + kToolbarGap;
+  const CGFloat locationFieldX = newTabButtonX + kButtonSize + kToolbarGap;
+
+  self.tabStrip = [[NSStackView alloc] initWithFrame:NSMakeRect(tabStripX,
+                                                                kToolbarButtonY,
+                                                                kTabStripWidth,
+                                                                28)];
   self.tabStrip.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   self.tabStrip.spacing = 6.0;
   self.tabStrip.distribution = NSStackViewDistributionGravityAreas;
 
   NSButton *backButton = [self iconButton:@"chevron.left" action:@selector(goBack:)];
-  backButton.frame = NSMakeRect(8, 7, kButtonSize, kButtonSize);
+  backButton.frame = NSMakeRect(backButtonX, kToolbarButtonY, kButtonSize, kButtonSize);
   NSButton *forwardButton = [self iconButton:@"chevron.right" action:@selector(goForward:)];
-  forwardButton.frame = NSMakeRect(40, 7, kButtonSize, kButtonSize);
+  forwardButton.frame = NSMakeRect(forwardButtonX, kToolbarButtonY, kButtonSize, kButtonSize);
+  NSButton *reloadButton = [self iconButton:@"arrow.clockwise" action:@selector(reload:)];
+  reloadButton.frame = NSMakeRect(reloadButtonX, kToolbarButtonY, kButtonSize, kButtonSize);
   NSButton *newTabButton = [self iconButton:@"plus" action:@selector(newTab:)];
-  newTabButton.frame = NSMakeRect(608, 7, kButtonSize, kButtonSize);
+  newTabButton.frame = NSMakeRect(newTabButtonX, kToolbarButtonY, kButtonSize, kButtonSize);
 
-  self.locationField = [[NSTextField alloc] initWithFrame:NSMakeRect(646,
-                                                                     7,
-                                                                     NSWidth(self.toolbarView.bounds) - 658,
+  self.locationField = [[NSTextField alloc] initWithFrame:NSMakeRect(locationFieldX,
+                                                                     kToolbarButtonY,
+                                                                     NSWidth(self.toolbarView.bounds) -
+                                                                         locationFieldX - 12,
                                                                      28)];
   self.locationField.autoresizingMask = NSViewWidthSizable;
   self.locationField.delegate = self;
@@ -105,6 +176,7 @@ constexpr CGFloat kButtonSize = 28.0;
 
   [self.toolbarView addSubview:backButton];
   [self.toolbarView addSubview:forwardButton];
+  [self.toolbarView addSubview:reloadButton];
   [self.toolbarView addSubview:self.tabStrip];
   [self.toolbarView addSubview:newTabButton];
   [self.toolbarView addSubview:self.locationField];
@@ -143,6 +215,17 @@ constexpr CGFloat kButtonSize = 28.0;
   return cefRoot;
 }
 
+- (NSInteger)initialTabCount {
+  const char *tabCountValue = std::getenv("FAKEND_BROWSER_INITIAL_TAB_COUNT");
+  if (!tabCountValue || tabCountValue[0] == '\0') {
+    return 1;
+  }
+
+  NSString *tabCountString = [NSString stringWithUTF8String:tabCountValue];
+  NSInteger tabCount = tabCountString.integerValue;
+  return MIN(MAX(tabCount, 1), 8);
+}
+
 - (void)newTab:(id)sender {
   (void)sender;
   [self newTabWithURL:@"about:blank"];
@@ -176,7 +259,12 @@ constexpr CGFloat kButtonSize = 28.0;
   BrowserTab *selected = self.tabs[index];
   [selected resizeToFrame:self.browserHostView.bounds];
   [self.browserHostView addSubview:selected.containerView];
-  self.locationField.stringValue = selected.displayURL ?: @"";
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (selected == self.selectedTab && selected.containerView.superview == self.browserHostView) {
+      [selected ensureBrowserCreated];
+    }
+  });
+  [self updateLocationFieldForTab:selected];
   [self reloadTabStrip];
 }
 
@@ -222,15 +310,90 @@ constexpr CGFloat kButtonSize = 28.0;
   [self.selectedTab goForward];
 }
 
-- (void)controlTextDidEndEditing:(NSNotification *)notification {
-  if (notification.object == self.locationField) {
-    [self.selectedTab loadURLString:self.locationField.stringValue];
+- (void)reload:(id)sender {
+  (void)sender;
+  BrowserTab *tab = self.selectedTab;
+  if (tab && [tab isBrowserReady]) {
+    [tab reload];
   }
+}
+
+- (void)closeTab:(id)sender {
+  (void)sender;
+  [self.selectedTab close];
+}
+
+- (void)focusLocation:(id)sender {
+  (void)sender;
+  [self.window makeFirstResponder:self.locationField];
+  [self.locationField selectText:nil];
+}
+
+- (BOOL)validateMenuItem:(NSMenuItem *)menuItem {
+  SEL action = menuItem.action;
+  BrowserTab *tab = self.selectedTab;
+  if (action == @selector(goBack:)) {
+    return tab && [tab canGoBack];
+  }
+  if (action == @selector(goForward:)) {
+    return tab && [tab canGoForward];
+  }
+  if (action == @selector(closeTab:) || action == @selector(reload:) || action == @selector(focusLocation:)) {
+    return tab != nil;
+  }
+  return YES;
+}
+
+- (BOOL)control:(NSControl *)control
+       textView:(NSTextView *)textView
+doCommandBySelector:(SEL)commandSelector {
+  (void)textView;
+  if (control != self.locationField) {
+    return NO;
+  }
+
+  if (commandSelector == @selector(insertNewline:)) {
+    [self commitLocationField];
+    return YES;
+  }
+
+  if (commandSelector == @selector(cancelOperation:)) {
+    [self updateLocationFieldForTab:self.selectedTab];
+    [self.window makeFirstResponder:nil];
+    return YES;
+  }
+
+  return NO;
+}
+
+- (void)controlTextDidEndEditing:(NSNotification *)notification {
+  (void)notification;
+}
+
+- (void)commitLocationField {
+  if (self.updatingLocationField) {
+    return;
+  }
+
+  BrowserTab *tab = self.selectedTab;
+  if (!tab) {
+    return;
+  }
+
+  [tab loadURLString:self.locationField.stringValue];
+  [self updateLocationFieldForTab:tab];
+  [self.window makeFirstResponder:nil];
+}
+
+- (void)updateLocationFieldForTab:(BrowserTab *)tab {
+  self.updatingLocationField = YES;
+  self.locationField.stringValue = tab.displayURL ?: @"";
+  self.updatingLocationField = NO;
 }
 
 - (void)browserTabDidUpdate:(BrowserTab *)tab {
   if (tab == self.selectedTab) {
-    self.locationField.stringValue = tab.displayURL ?: @"";
+    [self updateLocationFieldForTab:tab];
   }
   [self reloadTabStrip];
 }
@@ -244,7 +407,12 @@ constexpr CGFloat kButtonSize = 28.0;
   [tab.containerView removeFromSuperview];
   [self.tabs removeObjectAtIndex:index];
   if (self.tabs.count == 0) {
-    [self.window close];
+    if (self.closingWindow) {
+      [self.window close];
+    } else {
+      self.selectedIndex = NSNotFound;
+      [self newTabWithURL:@"about:blank"];
+    }
     return;
   }
 

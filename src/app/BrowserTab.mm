@@ -20,6 +20,8 @@
   CefRefPtr<CefBrowser> _browser;
   CefRefPtr<FakendClient> _client;
   CefRefPtr<CefRequestContext> _requestContext;
+  BOOL _browserCreationPending;
+  BOOL _browserCloseNotified;
 }
 
 - (instancetype)initWithFrame:(NSRect)frame
@@ -38,6 +40,10 @@
   _containerView.layer.backgroundColor = NSColor.blackColor.CGColor;
 
   NSString *tabStoragePath = [storageRoot stringByAppendingPathComponent:_identifier];
+  [[NSFileManager defaultManager] createDirectoryAtPath:tabStoragePath
+                            withIntermediateDirectories:YES
+                                             attributes:nil
+                                                  error:nil];
 
   CefRequestContextSettings requestSettings;
   CefString(&requestSettings.cache_path).FromString(std::string(tabStoragePath.UTF8String));
@@ -46,19 +52,38 @@
 
   _client = new FakendClient(self);
 
+  return self;
+}
+
+- (void)ensureBrowserCreated {
+  if (_browser || _browserCreationPending) {
+    return;
+  }
+
   CefWindowInfo windowInfo;
-  CefRect browserRect(0, 0, static_cast<int>(NSWidth(frame)), static_cast<int>(NSHeight(frame)));
+  CefRect browserRect(0,
+                      0,
+                      static_cast<int>(NSWidth(self.containerView.bounds)),
+                      static_cast<int>(NSHeight(self.containerView.bounds)));
   windowInfo.SetAsChild((__bridge CefWindowHandle)_containerView, browserRect);
+  windowInfo.runtime_style = CEF_RUNTIME_STYLE_ALLOY;
 
   CefBrowserSettings browserSettings;
-  CefBrowserHost::CreateBrowser(windowInfo,
-                                _client,
-                                std::string(initialURL.UTF8String),
-                                browserSettings,
-                                nullptr,
-                                _requestContext);
+  NSString *url = self.displayURL ?: @"about:blank";
+  NSString *navigationURL = [self navigationURLForDisplayURL:url];
+  _browserCreationPending = YES;
+  if (!CefBrowserHost::CreateBrowser(windowInfo,
+                                     _client,
+                                     std::string(navigationURL.UTF8String),
+                                     browserSettings,
+                                     nullptr,
+                                     _requestContext)) {
+    _browserCreationPending = NO;
+  }
+}
 
-  return self;
+- (BOOL)isBrowserReady {
+  return _browser != nullptr;
 }
 
 - (void)resizeToFrame:(NSRect)frame {
@@ -72,41 +97,72 @@
   NSString *normalized = [self normalizedURLString:urlString];
   self.displayURL = normalized;
   if (_browser) {
-    _browser->GetMainFrame()->LoadURL(std::string(normalized.UTF8String));
+    CefRefPtr<CefFrame> frame = _browser->GetMainFrame();
+    if (frame && frame->IsValid()) {
+      NSString *navigationURL = [self navigationURLForDisplayURL:normalized];
+      frame->LoadURL(std::string(navigationURL.UTF8String));
+    }
   }
 }
 
+- (BOOL)canGoBack {
+  return _browser && _browser->CanGoBack();
+}
+
+- (BOOL)canGoForward {
+  return _browser && _browser->CanGoForward();
+}
+
 - (void)goBack {
-  if (_browser && _browser->CanGoBack()) {
+  if ([self canGoBack]) {
     _browser->GoBack();
   }
 }
 
 - (void)goForward {
-  if (_browser && _browser->CanGoForward()) {
+  if ([self canGoForward]) {
     _browser->GoForward();
   }
 }
 
 - (void)reload {
-  if (_browser) {
+  if ([self isBrowserReady]) {
     _browser->Reload();
   }
 }
 
 - (void)close {
   if (_browser) {
-    _browser->GetHost()->CloseBrowser(false);
+    _browser->GetHost()->CloseBrowser(true);
     return;
   }
   [self.delegate browserTabDidClose:self];
 }
 
 - (void)bindBrowser:(CefRefPtr<CefBrowser>)browser {
+  _browserCreationPending = NO;
+  _browserCloseNotified = NO;
   _browser = browser;
 }
 
+- (BOOL)handleBrowserDoClose:(CefRefPtr<CefBrowser>)browser {
+  if (!_browser || !browser || !browser->IsSame(_browser)) {
+    return NO;
+  }
+
+  NSView *browserView = (__bridge NSView *)browser->GetHost()->GetWindowHandle();
+  [browserView removeFromSuperview];
+  [self browserClosed];
+  return YES;
+}
+
 - (void)browserClosed {
+  if (_browserCloseNotified) {
+    return;
+  }
+
+  _browserCloseNotified = YES;
+  _browserCreationPending = NO;
   _browser = nullptr;
   [self.delegate browserTabDidClose:self];
 }
@@ -119,8 +175,38 @@
 
 - (void)updateAddressFromCEF:(const CefString &)url {
   std::string urlString = url.ToString();
-  self.displayURL = [NSString stringWithUTF8String:urlString.c_str()];
+  NSString *displayURL = [NSString stringWithUTF8String:urlString.c_str()];
+  if ([displayURL isEqualToString:[self newTabPageURL]]) {
+    displayURL = @"about:blank";
+  }
+  self.displayURL = displayURL;
   [self.delegate browserTabDidUpdate:self];
+}
+
+- (NSString *)navigationURLForDisplayURL:(NSString *)displayURL {
+  if ([displayURL isEqualToString:@"about:blank"]) {
+    return [self newTabPageURL];
+  }
+  return displayURL;
+}
+
+- (NSString *)newTabPageURL {
+  NSString *html =
+      @"<!doctype html>"
+       "<html>"
+       "<head>"
+       "<meta charset=\"utf-8\">"
+       "<title>New Tab</title>"
+       "<style>"
+       "html,body{width:100%;height:100%;margin:0;background:#000;}"
+       "body{display:grid;place-items:center;color:#333;font:16px -apple-system,BlinkMacSystemFont,"
+       "\"Segoe UI\",sans-serif;}"
+       "</style>"
+       "</head>"
+       "<body>Open a fakend URL</body>"
+       "</html>";
+  NSData *data = [html dataUsingEncoding:NSUTF8StringEncoding];
+  return [@"data:text/html;base64," stringByAppendingString:[data base64EncodedStringWithOptions:0]];
 }
 
 - (NSString *)normalizedURLString:(NSString *)urlString {
@@ -129,16 +215,54 @@
     return @"about:blank";
   }
 
-  if ([trimmed containsString:@"://"] || [trimmed hasPrefix:@"about:"]) {
+  if ([trimmed hasPrefix:@"about:"]) {
     return trimmed;
   }
 
-  if ([trimmed containsString:@"."] && ![trimmed containsString:@" "]) {
-    return [@"https://" stringByAppendingString:trimmed];
+  if ([trimmed containsString:@"://"]) {
+    NSURLComponents *components = [NSURLComponents componentsWithString:trimmed];
+    if ([self shouldTreatAsWebURLComponents:components] && components.path.length == 0) {
+      components.path = @"/";
+      return components.string ?: trimmed;
+    }
+    return trimmed;
+  }
+
+  if ([self shouldTreatAsBareHost:trimmed]) {
+    NSString *candidate = [@"https://" stringByAppendingString:trimmed];
+    NSURLComponents *components = [NSURLComponents componentsWithString:candidate];
+    if ([self shouldTreatAsWebURLComponents:components] && components.path.length == 0) {
+      components.path = @"/";
+      return components.string ?: candidate;
+    }
+    return candidate;
   }
 
   NSString *escaped = [trimmed stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLQueryAllowedCharacterSet];
   return [@"https://www.google.com/search?q=" stringByAppendingString:escaped ?: @""];
+}
+
+- (BOOL)shouldTreatAsBareHost:(NSString *)value {
+  if ([value containsString:@" "] || [value containsString:@"@"]) {
+    return NO;
+  }
+
+  NSString *hostCandidate = value;
+  NSRange delimiterRange = [hostCandidate rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"/?#"]];
+  if (delimiterRange.location != NSNotFound) {
+    hostCandidate = [hostCandidate substringToIndex:delimiterRange.location];
+  }
+
+  return [hostCandidate containsString:@"."];
+}
+
+- (BOOL)shouldTreatAsWebURLComponents:(NSURLComponents *)components {
+  if (!components.host.length) {
+    return NO;
+  }
+
+  NSString *scheme = components.scheme.lowercaseString;
+  return [scheme isEqualToString:@"http"] || [scheme isEqualToString:@"https"];
 }
 
 @end

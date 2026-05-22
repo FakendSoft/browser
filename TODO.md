@@ -8,8 +8,8 @@ decisions change.
 - [x] Name: Fakend Browser.
 - [x] Target: macOS native app, ultraminimal UI, black/sleek visual language.
 - [x] Engine: Blink via Chromium Embedded Framework (CEF), not WebKit.
-- [ ] First usable milestone: open a native `.app`, create one tab, load a URL.
-- [ ] Second milestone: multiple tabs with separate CEF request contexts and
+- [x] First usable milestone: open a native `.app`, create one tab, load a URL.
+- [x] Second milestone: multiple tabs with separate CEF request contexts and
       per-tab storage roots.
 - [ ] Third milestone: harden process, storage, and network isolation.
 
@@ -38,19 +38,20 @@ decisions change.
 - [x] Use C++20 for current CEF headers.
 - [x] Use CEF standard distribution so the project has headers, CMake files,
       `libcef_dll_wrapper`, and sample-compatible bundle layout.
-- [x] Use a separate helper app executable for CEF subprocesses on macOS.
-- [ ] Initialize CEF from the main app with an external message pump integrated
+- [x] Use separate helper app executables for CEF subprocesses on macOS,
+      including renderer-specific helper bundles.
+- [x] Initialize CEF from the main app with an external message pump integrated
       into the AppKit run loop.
-- [ ] Copy `Chromium Embedded Framework.framework` and the helper `.app` into
-      the main `.app` bundle at build time. Current macOS CEF resources live
-      inside the framework bundle.
+- [x] Copy `Chromium Embedded Framework.framework` and the helper `.app`
+      variants into the main `.app` bundle at build time. Current macOS CEF
+      resources live inside the framework bundle.
 - [ ] Enable CEF sandboxing after signing and entitlement structure is in place.
       Development starts with sandbox disabled to get the first browser window
       bootstrapped.
 
 ## Tab Model
 
-- [ ] Represent each tab as a native object owning:
+- [x] Represent each tab as a native object owning:
       - an AppKit container view,
       - a `CefBrowser`,
       - a `CefClient`,
@@ -60,18 +61,18 @@ decisions change.
 - [x] Use one `CefRequestContextSettings.cache_path` per tab for cookie/cache
       isolation.
 - [x] Add `FAKEND_BROWSER_USER_DATA_DIR` override for isolated smoke profiles.
-- [ ] Track title and URL changes from CEF display callbacks.
-- [ ] Close and release each tab cleanly via `CefLifeSpanHandler`.
-- [ ] Add policy checks for popups, downloads, permission prompts, and external
+- [x] Track title and URL changes from CEF display callbacks.
+- [x] Close and release each tab cleanly via `CefLifeSpanHandler`.
+- [x] Add policy checks for popups, downloads, permission prompts, and external
       protocols before enabling general browsing.
 
 ## UI
 
-- [ ] Single native window with black background and hidden title bar chrome.
-- [ ] Compact tab strip with icon-only controls where practical.
-- [ ] Compact URL field.
-- [ ] No landing page, no marketing UI, no decorative gradients.
-- [ ] Keyboard shortcuts:
+- [x] Single native window with black background and hidden title bar chrome.
+- [x] Compact tab strip with icon-only controls where practical.
+- [x] Compact URL field.
+- [x] No landing page, no marketing UI, no decorative gradients.
+- [x] Keyboard shortcuts:
       - `Cmd+L` focus location.
       - `Cmd+T` new tab.
       - `Cmd+W` close tab.
@@ -104,9 +105,11 @@ decisions change.
 - [x] `flox activate -- scripts/build.sh` produces and signs the main `.app`.
 - [x] Smoke test: launch app with an isolated `FAKEND_BROWSER_USER_DATA_DIR`;
       CEF starts and creates a per-tab profile directory.
-- [ ] Smoke test: open a second tab and confirm two separate tab profile
+- [x] Smoke test: open a second tab and confirm two separate tab profile
       directories are created.
-- [ ] Inspect process tree and confirm CEF helper processes are used.
+- [x] Inspect process tree and confirm CEF helper processes are used.
+- [x] Smoke test: confirm the CEF renderer helper starts and the first page
+      reaches `Example Domain` through DevTools.
 - [ ] Verify close/reopen tab does not leave orphan helper processes.
 
 ## Risks / Decisions To Revisit

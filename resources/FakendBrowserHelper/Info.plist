@@ -4,6 +4,8 @@
 <dict>
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
+  <key>CFBundleDisplayName</key>
+  <string>Fakend Browser Helper</string>
   <key>CFBundleExecutable</key>
   <string>Fakend Browser Helper</string>
   <key>CFBundleIdentifier</key>
@@ -14,14 +16,24 @@
   <string>Fakend Browser Helper</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
+  <key>CFBundleSignature</key>
+  <string>????</string>
   <key>CFBundleShortVersionString</key>
   <string>0.1.0</string>
   <key>CFBundleVersion</key>
   <string>1</string>
-  <key>LSBackgroundOnly</key>
+  <key>LSEnvironment</key>
+  <dict>
+    <key>MallocNanoZone</key>
+    <string>0</string>
+  </dict>
+  <key>LSFileQuarantineEnabled</key>
   <true/>
   <key>LSMinimumSystemVersion</key>
   <string>14.0</string>
+  <key>LSUIElement</key>
+  <string>1</string>
+  <key>NSSupportsAutomaticGraphicsSwitching</key>
+  <true/>
 </dict>
 </plist>
-

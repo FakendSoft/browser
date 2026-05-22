@@ -26,8 +26,12 @@
 - (instancetype)initWithFrame:(NSRect)frame
                    initialURL:(NSString *)initialURL
                   storageRoot:(NSString *)storageRoot;
+- (void)ensureBrowserCreated;
+- (BOOL)isBrowserReady;
 - (void)resizeToFrame:(NSRect)frame;
 - (void)loadURLString:(NSString *)urlString;
+- (BOOL)canGoBack;
+- (BOOL)canGoForward;
 - (void)goBack;
 - (void)goForward;
 - (void)reload;
@@ -35,6 +39,7 @@
 
 #ifdef __cplusplus
 - (void)bindBrowser:(CefRefPtr<CefBrowser>)browser;
+- (BOOL)handleBrowserDoClose:(CefRefPtr<CefBrowser>)browser;
 - (void)browserClosed;
 - (void)updateTitleFromCEF:(const CefString &)title;
 - (void)updateAddressFromCEF:(const CefString &)url;

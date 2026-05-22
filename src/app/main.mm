@@ -5,8 +5,32 @@
 
 #import "AppDelegate.h"
 #include "FakendCefApp.h"
+#include "include/cef_application_mac.h"
 #include "include/cef_app.h"
 #include "include/wrapper/cef_library_loader.h"
+
+@interface FakendApplication : NSApplication <CefAppProtocol> {
+ @private
+  BOOL handlingSendEvent_;
+}
+@end
+
+@implementation FakendApplication
+
+- (BOOL)isHandlingSendEvent {
+  return handlingSendEvent_;
+}
+
+- (void)setHandlingSendEvent:(BOOL)handlingSendEvent {
+  handlingSendEvent_ = handlingSendEvent;
+}
+
+- (void)sendEvent:(NSEvent *)event {
+  CefScopedSendingEvent sendingEventScoper;
+  [super sendEvent:event];
+}
+
+@end
 
 namespace {
 
@@ -39,7 +63,6 @@ NSString *HelperExecutablePath() {
   NSString *frameworksPath = NSBundle.mainBundle.privateFrameworksPath;
   return [frameworksPath stringByAppendingPathComponent:@"Fakend Browser Helper.app/Contents/MacOS/Fakend Browser Helper"];
 }
-
 }  // namespace
 
 int main(int argc, char *argv[]) {
@@ -51,6 +74,7 @@ int main(int argc, char *argv[]) {
 
     CefMainArgs mainArgs(argc, argv);
     CefRefPtr<FakendCefApp> cefApp(new FakendCefApp());
+    NSApplication *application = [FakendApplication sharedApplication];
 
     NSString *supportRoot = ApplicationSupportRoot();
     NSString *cacheRoot = [supportRoot stringByAppendingPathComponent:@"CEF"];
@@ -63,7 +87,6 @@ int main(int argc, char *argv[]) {
     settings.external_message_pump = true;
     settings.no_sandbox = true;
     settings.remote_debugging_port = 9222;
-    CefString(&settings.browser_subprocess_path).FromString(ToString(HelperExecutablePath()));
     CefString(&settings.root_cache_path).FromString(ToString(cacheRoot));
     CefString(&settings.cache_path).FromString(ToString([cacheRoot stringByAppendingPathComponent:@"Global"]));
     CefString(&settings.log_file).FromString(ToString([supportRoot stringByAppendingPathComponent:@"cef.log"]));
@@ -72,7 +95,6 @@ int main(int argc, char *argv[]) {
       return 1;
     }
 
-    NSApplication *application = [NSApplication sharedApplication];
     application.activationPolicy = NSApplicationActivationPolicyRegular;
 
     AppDelegate *delegate = [[AppDelegate alloc] init];

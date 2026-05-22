@@ -28,6 +28,114 @@ jobs:
         id: version
         run: scripts/next-release-version.sh
 
+      - name: Generate release notes
+        id: release_notes
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_RELEASE_NOTES_MODEL || 'gpt-5.4-mini' }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${OPENAI_API_KEY:-}" ]]; then
+            printf "OPENAI_API_KEY repository secret is required for release notes.\n" >&2
+            exit 1
+          fi
+
+          previous_tag=""
+          while IFS= read -r tag; do
+            previous_tag="$tag"
+            break
+          done < <(git tag --merged "$GITHUB_SHA" --sort=-creatordate)
+          if [[ -n "$previous_tag" ]]; then
+            range="$previous_tag..$GITHUB_SHA"
+            range_label="$previous_tag -> $TAG"
+            git log --reverse --pretty=format:'- %s (%h)' "$range" > release-commits.txt
+            git diff --name-status "$previous_tag" "$GITHUB_SHA" > release-files.txt
+          else
+            range="$GITHUB_SHA"
+            range_label="Initial release -> $TAG"
+            git log --reverse --max-count=100 --pretty=format:'- %s (%h)' "$range" > release-commits.txt
+            git ls-tree -r --name-only "$GITHUB_SHA" > release-files.txt
+          fi
+          export RANGE_LABEL="$range_label"
+
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+
+          commits = pathlib.Path("release-commits.txt").read_text(encoding="utf-8").strip()
+          files = pathlib.Path("release-files.txt").read_text(encoding="utf-8").strip()
+          user_input = f"""Project: Fakend Browser
+          Version: {os.environ["VERSION"]}
+          Range: {os.environ["RANGE_LABEL"]}
+
+          Commit subjects:
+          {commits or "- No commit subjects found."}
+
+          Changed files:
+          {files or "- No changed files found."}
+
+          Write concise GitHub release notes for users. Keep it short and clear:
+          - Start with: ## Changes
+          - Use 3 to 5 bullets.
+          - Group related commits.
+          - Mention user-visible behavior, build/release changes, and important internal work only when useful.
+          - Do not include commit hashes, marketing language, or installation instructions.
+          """
+          payload = {
+              "model": os.environ["OPENAI_MODEL"],
+              "instructions": "You summarize software release changes in compact, factual Markdown.",
+              "input": user_input,
+              "max_output_tokens": 500,
+          }
+          pathlib.Path("release-notes-request.json").write_text(
+              json.dumps(payload), encoding="utf-8"
+          )
+          PY
+
+          curl --fail-with-body --silent --show-error \
+            https://api.openai.com/v1/responses \
+            -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -H "Content-Type: application/json" \
+            --data-binary @release-notes-request.json \
+            > release-notes-response.json
+
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          response = json.loads(pathlib.Path("release-notes-response.json").read_text(encoding="utf-8"))
+          parts = []
+
+          if isinstance(response.get("output_text"), str):
+              parts.append(response["output_text"])
+          else:
+              for item in response.get("output", []):
+                  if item.get("type") != "message":
+                      continue
+                  for content in item.get("content", []):
+                      if content.get("type") in {"output_text", "text"} and content.get("text"):
+                          parts.append(content["text"])
+
+          notes = "\n".join(part.strip() for part in parts if part.strip()).strip()
+          if not notes:
+              print("OpenAI response did not contain release notes text.", file=sys.stderr)
+              print(json.dumps(response, indent=2), file=sys.stderr)
+              sys.exit(1)
+
+          pathlib.Path("release-notes.md").write_text(notes + "\n", encoding="utf-8")
+          PY
+
+          {
+            printf "path=%s\n" "$PWD/release-notes.md"
+            printf "previous_tag=%s\n" "$previous_tag"
+            printf "range=%s\n" "$range"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Set bundle version
         run: scripts/set-version.sh "${{ steps.version.outputs.version }}"
 
@@ -54,6 +162,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           DMG_PATH: ${{ steps.package.outputs.dmg_path }}
           SHA256_PATH: ${{ steps.package.outputs.sha256_path }}
+          RELEASE_NOTES_PATH: ${{ steps.release_notes.outputs.path }}
         run: |
           set -euo pipefail
 
@@ -62,5 +171,4 @@ jobs:
             "$SHA256_PATH#Fakend Browser ${VERSION}.dmg.sha256" \
             --target "$GITHUB_SHA" \
             --title "Fakend Browser ${VERSION}" \
-            --notes "Manual release ${VERSION}. Includes a macOS arm64 DMG."
-
+            --notes-file "$RELEASE_NOTES_PATH"

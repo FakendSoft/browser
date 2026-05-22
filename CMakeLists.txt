@@ -41,15 +41,48 @@ set_target_properties(FakendBrowser PROPERTIES
   MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/resources/FakendBrowser/Info.plist"
 )
 
-add_executable(FakendBrowserHelper MACOSX_BUNDLE ${FAKEND_HELPER_SOURCES})
-set_target_properties(FakendBrowserHelper PROPERTIES
-  OUTPUT_NAME "Fakend Browser Helper"
-  MACOSX_BUNDLE_BUNDLE_NAME "Fakend Browser Helper"
-  MACOSX_BUNDLE_GUI_IDENTIFIER "com.fakend.browser.helper"
-  MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/resources/FakendBrowserHelper/Info.plist"
+set(FAKEND_HELPER_APP_SUFFIXES
+  "::"
+  " (Alerts):_alerts:.alerts"
+  " (GPU):_gpu:.gpu"
+  " (Plugin):_plugin:.plugin"
+  " (Renderer):_renderer:.renderer"
 )
+set(FAKEND_HELPER_TARGETS)
 
-foreach(target FakendBrowser FakendBrowserHelper)
+foreach(helper_suffix_list ${FAKEND_HELPER_APP_SUFFIXES})
+  string(REPLACE ":" ";" helper_suffix_parts "${helper_suffix_list}")
+  list(GET helper_suffix_parts 0 helper_name_suffix)
+  list(GET helper_suffix_parts 1 helper_target_suffix)
+  list(GET helper_suffix_parts 2 helper_bundle_id_suffix)
+
+  set(helper_target "FakendBrowserHelper${helper_target_suffix}")
+  set(helper_output_name "Fakend Browser Helper${helper_name_suffix}")
+  set(helper_bundle_id "com.fakend.browser.helper${helper_bundle_id_suffix}")
+  set(helper_info_plist "${CMAKE_BINARY_DIR}/${helper_target}-Info.plist")
+
+  file(READ "${CMAKE_SOURCE_DIR}/resources/FakendBrowserHelper/Info.plist" helper_info_contents)
+  string(REPLACE "<string>Fakend Browser Helper</string>"
+                 "<string>${helper_output_name}</string>"
+                 helper_info_contents
+                 "${helper_info_contents}")
+  string(REPLACE "<string>com.fakend.browser.helper</string>"
+                 "<string>${helper_bundle_id}</string>"
+                 helper_info_contents
+                 "${helper_info_contents}")
+  file(WRITE "${helper_info_plist}" "${helper_info_contents}")
+
+  add_executable(${helper_target} MACOSX_BUNDLE ${FAKEND_HELPER_SOURCES})
+  set_target_properties(${helper_target} PROPERTIES
+    OUTPUT_NAME "${helper_output_name}"
+    MACOSX_BUNDLE_BUNDLE_NAME "${helper_output_name}"
+    MACOSX_BUNDLE_GUI_IDENTIFIER "${helper_bundle_id}"
+    MACOSX_BUNDLE_INFO_PLIST "${helper_info_plist}"
+  )
+  list(APPEND FAKEND_HELPER_TARGETS ${helper_target})
+endforeach()
+
+foreach(target FakendBrowser ${FAKEND_HELPER_TARGETS})
   target_include_directories(${target} PRIVATE
     "${CMAKE_SOURCE_DIR}/src"
     "${CEF_ROOT}"
@@ -65,12 +98,19 @@ foreach(target FakendBrowser FakendBrowserHelper)
   add_dependencies(${target} libcef_dll_wrapper)
 endforeach()
 
-add_dependencies(FakendBrowser FakendBrowserHelper)
+add_dependencies(FakendBrowser ${FAKEND_HELPER_TARGETS})
 
 set(CEF_FRAMEWORK_PATH "${CEF_ROOT}/Release/Chromium Embedded Framework.framework")
 
 add_custom_command(TARGET FakendBrowser POST_BUILD
   COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_BUNDLE_DIR:FakendBrowser>/Contents/Frameworks"
   COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CEF_FRAMEWORK_PATH}" "$<TARGET_BUNDLE_DIR:FakendBrowser>/Contents/Frameworks/Chromium Embedded Framework.framework"
-  COMMAND "${CMAKE_COMMAND}" -E copy_directory "$<TARGET_BUNDLE_DIR:FakendBrowserHelper>" "$<TARGET_BUNDLE_DIR:FakendBrowser>/Contents/Frameworks/Fakend Browser Helper.app"
+  VERBATIM
 )
+
+foreach(helper_target ${FAKEND_HELPER_TARGETS})
+  add_custom_command(TARGET FakendBrowser POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy_directory "$<TARGET_BUNDLE_DIR:${helper_target}>" "$<TARGET_BUNDLE_DIR:FakendBrowser>/Contents/Frameworks/$<TARGET_PROPERTY:${helper_target},OUTPUT_NAME>.app"
+    VERBATIM
+  )
+endforeach()

@@ -7,12 +7,39 @@
 #include "include/cef_request_context.h"
 #include "include/cef_request_context_handler.h"
 
+@interface NewTabDragOverlayView : NSView
+@end
+
+@implementation NewTabDragOverlayView
+
+- (BOOL)isOpaque {
+  return NO;
+}
+
+- (BOOL)acceptsFirstMouse:(NSEvent *)event {
+  (void)event;
+  return YES;
+}
+
+- (BOOL)mouseDownCanMoveWindow {
+  return YES;
+}
+
+- (void)mouseDown:(NSEvent *)event {
+  [self.window performWindowDragWithEvent:event];
+}
+
+@end
+
 @interface BrowserTab ()
 
 @property(nonatomic, strong, readwrite) NSView *containerView;
 @property(nonatomic, copy, readwrite) NSString *identifier;
 @property(nonatomic, copy, readwrite) NSString *title;
 @property(nonatomic, copy, readwrite) NSString *displayURL;
+@property(nonatomic, strong) NSView *blankPageDragOverlayView;
+
+- (void)updateNewTabDragOverlay;
 
 @end
 
@@ -38,6 +65,10 @@
   _containerView = [[NSView alloc] initWithFrame:frame];
   _containerView.wantsLayer = YES;
   _containerView.layer.backgroundColor = NSColor.blackColor.CGColor;
+  _blankPageDragOverlayView = [[NewTabDragOverlayView alloc] initWithFrame:_containerView.bounds];
+  _blankPageDragOverlayView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  _blankPageDragOverlayView.hidden = NO;
+  [_containerView addSubview:_blankPageDragOverlayView];
 
   NSString *tabStoragePath = [storageRoot stringByAppendingPathComponent:_identifier];
   [[NSFileManager defaultManager] createDirectoryAtPath:tabStoragePath
@@ -80,6 +111,7 @@
                                      _requestContext)) {
     _browserCreationPending = NO;
   }
+  [self updateNewTabDragOverlay];
 }
 
 - (BOOL)isBrowserReady {
@@ -88,6 +120,7 @@
 
 - (void)resizeToFrame:(NSRect)frame {
   self.containerView.frame = frame;
+  [self updateNewTabDragOverlay];
   if (_browser) {
     _browser->GetHost()->WasResized();
   }
@@ -96,6 +129,7 @@
 - (void)loadURLString:(NSString *)urlString {
   NSString *normalized = [self normalizedURLString:urlString];
   self.displayURL = normalized;
+  [self updateNewTabDragOverlay];
   if (_browser) {
     CefRefPtr<CefFrame> frame = _browser->GetMainFrame();
     if (frame && frame->IsValid()) {
@@ -143,6 +177,7 @@
   _browserCreationPending = NO;
   _browserCloseNotified = NO;
   _browser = browser;
+  [self updateNewTabDragOverlay];
 }
 
 - (BOOL)handleBrowserDoClose:(CefRefPtr<CefBrowser>)browser {
@@ -180,6 +215,7 @@
     displayURL = @"about:blank";
   }
   self.displayURL = displayURL;
+  [self updateNewTabDragOverlay];
   [self.delegate browserTabDidUpdate:self];
 }
 
@@ -200,13 +236,23 @@
        "<style>"
        "html,body{width:100%;height:100%;margin:0;background:#000;}"
        "body{display:grid;place-items:center;color:#333;font:16px -apple-system,BlinkMacSystemFont,"
-       "\"Segoe UI\",sans-serif;}"
+       "\"Segoe UI\",sans-serif;-webkit-app-region:drag;user-select:none;}"
        "</style>"
        "</head>"
        "<body>Open a fakend URL</body>"
        "</html>";
   NSData *data = [html dataUsingEncoding:NSUTF8StringEncoding];
   return [@"data:text/html;base64," stringByAppendingString:[data base64EncodedStringWithOptions:0]];
+}
+
+- (void)updateNewTabDragOverlay {
+  if (!self.blankPageDragOverlayView) {
+    return;
+  }
+
+  self.blankPageDragOverlayView.frame = self.containerView.bounds;
+  self.blankPageDragOverlayView.hidden = ![self.displayURL isEqualToString:@"about:blank"];
+  [self.containerView addSubview:self.blankPageDragOverlayView positioned:NSWindowAbove relativeTo:nil];
 }
 
 - (NSString *)normalizedURLString:(NSString *)urlString {

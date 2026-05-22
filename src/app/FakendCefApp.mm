@@ -72,6 +72,7 @@ void FakendCefApp::OnBeforeCommandLineProcessing(
   command_line->AppendSwitchWithValue("disable-features",
                                       "Translate,AutofillServerCommunication");
   command_line->AppendSwitch("enable-gpu-rasterization");
+  command_line->AppendSwitch("force-dark-mode");
 #if defined(OS_MAC)
   command_line->AppendSwitch("use-mock-keychain");
 #endif

@@ -253,8 +253,18 @@ BOOL WindowPointIsInsideView(NSView *view, NSPoint windowPoint) {
   self.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
 }
 
+- (BOOL)acceptsFirstMouse:(NSEvent *)event {
+  (void)event;
+  return YES;
+}
+
+- (BOOL)mouseDownCanMoveWindow {
+  return NO;
+}
+
 - (void)mouseDown:(NSEvent *)event {
   BOOL wasEditing = self.currentEditor && self.window.firstResponder == self.currentEditor;
+  [self.window makeFirstResponder:self];
   [super mouseDown:event];
   if (wasEditing) {
     return;
@@ -386,6 +396,8 @@ BOOL WindowPointIsInsideView(NSView *view, NSPoint windowPoint) {
   self.locationField = [[LocationTextField alloc] initWithFrame:NSZeroRect];
   self.locationField.cell = [[LocationTextFieldCell alloc] initTextCell:@""];
   self.locationField.delegate = self;
+  self.locationField.editable = YES;
+  self.locationField.selectable = YES;
   self.locationField.bezeled = NO;
   self.locationField.bordered = NO;
   self.locationField.drawsBackground = NO;

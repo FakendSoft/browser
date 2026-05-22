@@ -75,6 +75,7 @@ int main(int argc, char *argv[]) {
     CefMainArgs mainArgs(argc, argv);
     CefRefPtr<FakendCefApp> cefApp(new FakendCefApp());
     NSApplication *application = [FakendApplication sharedApplication];
+    application.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
 
     NSString *supportRoot = ApplicationSupportRoot();
     NSString *cacheRoot = [supportRoot stringByAppendingPathComponent:@"CEF"];
@@ -87,6 +88,7 @@ int main(int argc, char *argv[]) {
     settings.external_message_pump = true;
     settings.no_sandbox = true;
     settings.remote_debugging_port = 9222;
+    settings.background_color = CefColorSetARGB(0xFF, 0, 0, 0);
     CefString(&settings.root_cache_path).FromString(ToString(cacheRoot));
     CefString(&settings.cache_path).FromString(ToString([cacheRoot stringByAppendingPathComponent:@"Global"]));
     CefString(&settings.log_file).FromString(ToString([supportRoot stringByAppendingPathComponent:@"cef.log"]));

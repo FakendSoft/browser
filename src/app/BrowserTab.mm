@@ -8,17 +8,53 @@
 #include "include/cef_request_context_handler.h"
 
 @interface NewTabDragOverlayView : NSView
+
+@property(nonatomic, strong) NSTextField *messageLabel;
+
 @end
 
 @implementation NewTabDragOverlayView
 
+- (instancetype)initWithFrame:(NSRect)frame {
+  self = [super initWithFrame:frame];
+  if (!self) {
+    return nil;
+  }
+
+  self.wantsLayer = YES;
+  self.layer.backgroundColor = NSColor.blackColor.CGColor;
+
+  _messageLabel = [NSTextField labelWithString:@"Open a fakend URL"];
+  _messageLabel.alignment = NSTextAlignmentCenter;
+  _messageLabel.font = [NSFont systemFontOfSize:16 weight:NSFontWeightRegular];
+  _messageLabel.textColor = [NSColor colorWithCalibratedWhite:0.20 alpha:1.0];
+  [_messageLabel setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow
+                                          forOrientation:NSLayoutConstraintOrientationHorizontal];
+  [self addSubview:_messageLabel];
+
+  return self;
+}
+
+- (void)layout {
+  [super layout];
+  CGFloat labelHeight = 24.0;
+  self.messageLabel.frame = NSMakeRect(0,
+                                       floor((NSHeight(self.bounds) - labelHeight) / 2.0),
+                                       NSWidth(self.bounds),
+                                       labelHeight);
+}
+
 - (BOOL)isOpaque {
-  return NO;
+  return YES;
 }
 
 - (BOOL)acceptsFirstMouse:(NSEvent *)event {
   (void)event;
   return YES;
+}
+
+- (NSView *)hitTest:(NSPoint)point {
+  return NSPointInRect(point, self.bounds) ? self : nil;
 }
 
 - (BOOL)mouseDownCanMoveWindow {
@@ -80,6 +116,8 @@
   CefString(&requestSettings.cache_path).FromString(std::string(tabStoragePath.UTF8String));
   requestSettings.persist_session_cookies = false;
   _requestContext = CefRequestContext::CreateContext(requestSettings, nullptr);
+  _requestContext->SetChromeColorScheme(CEF_COLOR_VARIANT_DARK,
+                                        CefColorSetARGB(0xFF, 0, 0, 0));
 
   _client = new FakendClient(self);
 
@@ -100,6 +138,7 @@
   windowInfo.runtime_style = CEF_RUNTIME_STYLE_ALLOY;
 
   CefBrowserSettings browserSettings;
+  browserSettings.background_color = CefColorSetARGB(0xFF, 0, 0, 0);
   NSString *url = self.displayURL ?: @"about:blank";
   NSString *navigationURL = [self navigationURLForDisplayURL:url];
   _browserCreationPending = YES;

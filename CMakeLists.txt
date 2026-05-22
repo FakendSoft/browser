@@ -28,12 +28,20 @@ set(FAKEND_APP_SOURCES
   src/app/main.mm
 )
 
+set(FAKEND_APP_RESOURCES
+  resources/FakendBrowser/AppIcon.icns
+)
+
+set_source_files_properties(${FAKEND_APP_RESOURCES} PROPERTIES
+  MACOSX_PACKAGE_LOCATION Resources
+)
+
 set(FAKEND_HELPER_SOURCES
   src/helper/main.mm
   src/app/FakendCefApp.mm
 )
 
-add_executable(FakendBrowser MACOSX_BUNDLE ${FAKEND_APP_SOURCES})
+add_executable(FakendBrowser MACOSX_BUNDLE ${FAKEND_APP_SOURCES} ${FAKEND_APP_RESOURCES})
 set_target_properties(FakendBrowser PROPERTIES
   OUTPUT_NAME "Fakend Browser"
   MACOSX_BUNDLE_BUNDLE_NAME "Fakend Browser"

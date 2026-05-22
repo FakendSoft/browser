@@ -22,10 +22,12 @@
   NSMenu *mainMenu = [[NSMenu alloc] initWithTitle:@""];
   NSMenuItem *appMenuItem = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""];
   NSMenuItem *fileMenuItem = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""];
+  NSMenuItem *editMenuItem = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""];
   NSMenuItem *navigateMenuItem = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""];
 
   [mainMenu addItem:appMenuItem];
   [mainMenu addItem:fileMenuItem];
+  [mainMenu addItem:editMenuItem];
   [mainMenu addItem:navigateMenuItem];
 
   NSMenu *appMenu = [[NSMenu alloc] initWithTitle:@"Fakend Browser"];
@@ -38,6 +40,10 @@
   NSMenuItem *closeTabItem = [fileMenu addItemWithTitle:@"Close Tab" action:@selector(closeTab:) keyEquivalent:@"w"];
   closeTabItem.target = self.browserWindowController;
   fileMenuItem.submenu = fileMenu;
+
+  NSMenu *editMenu = [[NSMenu alloc] initWithTitle:@"Edit"];
+  [editMenu addItemWithTitle:@"Select All" action:@selector(selectAll:) keyEquivalent:@"a"];
+  editMenuItem.submenu = editMenu;
 
   NSMenu *navigateMenu = [[NSMenu alloc] initWithTitle:@"Navigate"];
   NSMenuItem *focusLocationItem = [navigateMenu addItemWithTitle:@"Focus Location" action:@selector(focusLocation:) keyEquivalent:@"l"];

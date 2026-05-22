@@ -1,6 +1,7 @@
 #pragma once
 
 #include "include/cef_client.h"
+#include "include/cef_context_menu_handler.h"
 #include "include/cef_download_handler.h"
 #include "include/cef_permission_handler.h"
 #include "include/cef_resource_request_handler.h"
@@ -8,6 +9,7 @@
 @class BrowserTab;
 
 class FakendClient final : public CefClient,
+                           public CefContextMenuHandler,
                            public CefDisplayHandler,
                            public CefDownloadHandler,
                            public CefLifeSpanHandler,
@@ -18,6 +20,7 @@ class FakendClient final : public CefClient,
  public:
   explicit FakendClient(BrowserTab* tab);
 
+  CefRefPtr<CefContextMenuHandler> GetContextMenuHandler() override;
   CefRefPtr<CefDisplayHandler> GetDisplayHandler() override;
   CefRefPtr<CefDownloadHandler> GetDownloadHandler() override;
   CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override;
@@ -46,6 +49,15 @@ class FakendClient final : public CefClient,
   void OnAddressChange(CefRefPtr<CefBrowser> browser,
                        CefRefPtr<CefFrame> frame,
                        const CefString& url) override;
+  void OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
+                           CefRefPtr<CefFrame> frame,
+                           CefRefPtr<CefContextMenuParams> params,
+                           CefRefPtr<CefMenuModel> model) override;
+  bool OnContextMenuCommand(CefRefPtr<CefBrowser> browser,
+                            CefRefPtr<CefFrame> frame,
+                            CefRefPtr<CefContextMenuParams> params,
+                            int command_id,
+                            EventFlags event_flags) override;
   bool CanDownload(CefRefPtr<CefBrowser> browser,
                    const CefString& url,
                    const CefString& request_method) override;

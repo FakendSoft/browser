@@ -212,6 +212,14 @@
   [self.delegate browserTabDidClose:self];
 }
 
+- (void)openURLInNewTab:(NSString *)urlString {
+  if (urlString.length == 0) {
+    return;
+  }
+
+  [self.delegate browserTab:self openURLInNewTab:urlString];
+}
+
 - (void)bindBrowser:(CefRefPtr<CefBrowser>)browser {
   _browserCreationPending = NO;
   _browserCloseNotified = NO;

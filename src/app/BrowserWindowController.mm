@@ -2,6 +2,13 @@
 
 #include <cstdlib>
 
+@interface BrowserWindowController (LocationFieldKeyHandling)
+
+- (void)selectAllLocationText;
+- (BOOL)selectLocationTextIfActive;
+
+@end
+
 namespace {
 constexpr CGFloat kToolbarHeight = 42.0;
 constexpr CGFloat kButtonSize = 28.0;
@@ -54,6 +61,12 @@ BOOL WindowPointIsInsideView(NSView *view, NSPoint windowPoint) {
       modifiers == NSEventModifierFlagCommand &&
       [characters isEqualToString:@"w"]) {
     [self.browserController closeTab:nil];
+    return YES;
+  }
+  if (event.type == NSEventTypeKeyDown &&
+      modifiers == NSEventModifierFlagCommand &&
+      [characters isEqualToString:@"a"] &&
+      [self.browserController selectLocationTextIfActive]) {
     return YES;
   }
 
@@ -130,6 +143,13 @@ BOOL WindowPointIsInsideView(NSView *view, NSPoint windowPoint) {
 - (BOOL)acceptsFirstMouse:(NSEvent *)event {
   (void)event;
   return YES;
+}
+
+- (void)resetCursorRects {
+  [super resetCursorRects];
+  if (self.enabled && self.dragDelegate) {
+    [self addCursorRect:self.bounds cursor:NSCursor.pointingHandCursor];
+  }
 }
 
 - (void)mouseDown:(NSEvent *)event {
@@ -244,6 +264,29 @@ BOOL WindowPointIsInsideView(NSView *view, NSPoint windowPoint) {
 
 @implementation LocationTextField
 
+- (BOOL)isCommandAEvent:(NSEvent *)event {
+  NSEventModifierFlags modifiers =
+      event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+  return event.type == NSEventTypeKeyDown &&
+         modifiers == NSEventModifierFlagCommand &&
+         [event.charactersIgnoringModifiers.lowercaseString isEqualToString:@"a"];
+}
+
+- (void)selectAllText {
+  [self selectText:nil];
+  NSText *editor = self.currentEditor;
+  if (editor) {
+    [editor setSelectedRange:NSMakeRange(0, self.stringValue.length)];
+  }
+}
+
+- (void)selectAllTextSoon {
+  __weak LocationTextField *weakSelf = self;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [weakSelf selectAllText];
+  });
+}
+
 - (BOOL)allowsVibrancy {
   return NO;
 }
@@ -258,6 +301,14 @@ BOOL WindowPointIsInsideView(NSView *view, NSPoint windowPoint) {
   return YES;
 }
 
+- (BOOL)becomeFirstResponder {
+  BOOL didBecomeFirstResponder = [super becomeFirstResponder];
+  if (didBecomeFirstResponder) {
+    [self selectAllTextSoon];
+  }
+  return didBecomeFirstResponder;
+}
+
 - (BOOL)mouseDownCanMoveWindow {
   return NO;
 }
@@ -270,9 +321,25 @@ BOOL WindowPointIsInsideView(NSView *view, NSPoint windowPoint) {
     return;
   }
 
-  dispatch_async(dispatch_get_main_queue(), ^{
-    [self selectText:nil];
-  });
+  [self selectAllTextSoon];
+}
+
+- (BOOL)performKeyEquivalent:(NSEvent *)event {
+  if ([self isCommandAEvent:event]) {
+    [self selectAllText];
+    return YES;
+  }
+
+  return [super performKeyEquivalent:event];
+}
+
+- (void)keyDown:(NSEvent *)event {
+  if ([self isCommandAEvent:event]) {
+    [self selectAllText];
+    return;
+  }
+
+  [super keyDown:event];
 }
 
 @end
@@ -598,8 +665,8 @@ BOOL WindowPointIsInsideView(NSView *view, NSPoint windowPoint) {
     button.font = [NSFont systemFontOfSize:12 weight:NSFontWeightMedium];
     button.lineBreakMode = NSLineBreakByTruncatingTail;
     button.bezelStyle = index == static_cast<NSUInteger>(self.selectedIndex)
-                            ? NSBezelStyleTexturedRounded
-                            : NSBezelStyleRegularSquare;
+                            ? NSBezelStyleRegularSquare
+                            : NSBezelStyleTexturedRounded;
     [button setContentHuggingPriority:NSLayoutPriorityDefaultLow forOrientation:NSLayoutConstraintOrientationHorizontal];
     [button setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow
                                     forOrientation:NSLayoutConstraintOrientationHorizontal];
@@ -621,8 +688,8 @@ BOOL WindowPointIsInsideView(NSView *view, NSPoint windowPoint) {
     button.tag = static_cast<NSInteger>(index);
     button.title = tab.title.length > 0 ? tab.title : @"New Tab";
     button.bezelStyle = index == static_cast<NSUInteger>(self.selectedIndex)
-                            ? NSBezelStyleTexturedRounded
-                            : NSBezelStyleRegularSquare;
+                            ? NSBezelStyleRegularSquare
+                            : NSBezelStyleTexturedRounded;
   }];
 }
 
@@ -708,7 +775,26 @@ BOOL WindowPointIsInsideView(NSView *view, NSPoint windowPoint) {
 - (void)focusLocation:(id)sender {
   (void)sender;
   [self.window makeFirstResponder:self.locationField];
+  [self selectAllLocationText];
+}
+
+- (void)selectAllLocationText {
   [self.locationField selectText:nil];
+  NSText *editor = self.locationField.currentEditor;
+  if (editor) {
+    [editor setSelectedRange:NSMakeRange(0, self.locationField.stringValue.length)];
+  }
+}
+
+- (BOOL)selectLocationTextIfActive {
+  NSResponder *firstResponder = self.window.firstResponder;
+  NSText *editor = self.locationField.currentEditor;
+  if (firstResponder != self.locationField && firstResponder != editor) {
+    return NO;
+  }
+
+  [self selectAllLocationText];
+  return YES;
 }
 
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem {
@@ -753,6 +839,16 @@ doCommandBySelector:(SEL)commandSelector {
   return NO;
 }
 
+- (void)controlTextDidBeginEditing:(NSNotification *)notification {
+  if (notification.object != self.locationField) {
+    return;
+  }
+
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [self selectAllLocationText];
+  });
+}
+
 - (void)controlTextDidEndEditing:(NSNotification *)notification {
   (void)notification;
 }
@@ -783,6 +879,11 @@ doCommandBySelector:(SEL)commandSelector {
     [self updateLocationFieldForTab:tab];
   }
   [self reloadTabStrip];
+}
+
+- (void)browserTab:(BrowserTab *)tab openURLInNewTab:(NSString *)urlString {
+  (void)tab;
+  [self newTabWithURL:urlString];
 }
 
 - (void)browserTabDidClose:(BrowserTab *)tab {

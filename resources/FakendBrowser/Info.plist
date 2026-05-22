@@ -8,6 +8,8 @@
   <string>Fakend Browser</string>
   <key>CFBundleIdentifier</key>
   <string>com.fakend.browser</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon.icns</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
@@ -26,4 +28,3 @@
   <true/>
 </dict>
 </plist>
-

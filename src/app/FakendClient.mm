@@ -1,10 +1,21 @@
 #include "FakendClient.h"
 
+#include <string>
+
 #import "BrowserTab.h"
 
+#include "include/cef_menu_model.h"
 #include "include/wrapper/cef_helpers.h"
 
+namespace {
+constexpr int kOpenLinkInNewTabCommandId = MENU_ID_USER_FIRST;
+}
+
 FakendClient::FakendClient(BrowserTab* tab) : tab_(tab) {}
+
+CefRefPtr<CefContextMenuHandler> FakendClient::GetContextMenuHandler() {
+  return this;
+}
 
 CefRefPtr<CefDisplayHandler> FakendClient::GetDisplayHandler() {
   return this;
@@ -91,6 +102,47 @@ void FakendClient::OnAddressChange(CefRefPtr<CefBrowser> browser,
   if (frame && frame->IsMain()) {
     [tab_ updateAddressFromCEF:url];
   }
+}
+
+void FakendClient::OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
+                                       CefRefPtr<CefFrame> frame,
+                                       CefRefPtr<CefContextMenuParams> params,
+                                       CefRefPtr<CefMenuModel> model) {
+  (void)browser;
+  (void)frame;
+  CEF_REQUIRE_UI_THREAD();
+
+  if (!params || !model || params->GetLinkUrl().ToString().empty()) {
+    return;
+  }
+
+  if (model->GetCount() > 0) {
+    model->AddSeparator();
+  }
+  model->AddItem(kOpenLinkInNewTabCommandId, "Open Link in New Tab");
+}
+
+bool FakendClient::OnContextMenuCommand(CefRefPtr<CefBrowser> browser,
+                                        CefRefPtr<CefFrame> frame,
+                                        CefRefPtr<CefContextMenuParams> params,
+                                        int command_id,
+                                        EventFlags event_flags) {
+  (void)browser;
+  (void)frame;
+  (void)event_flags;
+  CEF_REQUIRE_UI_THREAD();
+
+  if (command_id != kOpenLinkInNewTabCommandId || !params) {
+    return false;
+  }
+
+  std::string linkUrl = params->GetLinkUrl().ToString();
+  if (linkUrl.empty()) {
+    return true;
+  }
+
+  [tab_ openURLInNewTab:[NSString stringWithUTF8String:linkUrl.c_str()]];
+  return true;
 }
 
 bool FakendClient::CanDownload(CefRefPtr<CefBrowser> browser,

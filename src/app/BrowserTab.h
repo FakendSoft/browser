@@ -12,6 +12,7 @@
 
 - (void)browserTabDidUpdate:(BrowserTab *)tab;
 - (void)browserTabDidClose:(BrowserTab *)tab;
+- (void)browserTab:(BrowserTab *)tab openURLInNewTab:(NSString *)urlString;
 
 @end
 
@@ -36,6 +37,7 @@
 - (void)goForward;
 - (void)reload;
 - (void)close;
+- (void)openURLInNewTab:(NSString *)urlString;
 
 #ifdef __cplusplus
 - (void)bindBrowser:(CefRefPtr<CefBrowser>)browser;

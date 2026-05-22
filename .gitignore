@@ -1,0 +1,12 @@
+.DS_Store
+build/
+DerivedData/
+dist/
+vendor/cef/cache/
+vendor/cef/dist/
+vendor/cef/current
+vendor/cef/index.json
+*.xcworkspace
+*.xcodeproj
+*.xcuserstate
+*.xcuserdata/

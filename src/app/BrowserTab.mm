@@ -327,7 +327,8 @@
   }
 
   if ([self shouldTreatAsBareHost:trimmed]) {
-    NSString *candidate = [@"https://" stringByAppendingString:trimmed];
+    NSString *scheme = [self shouldUseHTTPForBareHost:trimmed] ? @"http://" : @"https://";
+    NSString *candidate = [scheme stringByAppendingString:trimmed];
     NSURLComponents *components = [NSURLComponents componentsWithString:candidate];
     if ([self shouldTreatAsWebURLComponents:components] && components.path.length == 0) {
       components.path = @"/";
@@ -351,7 +352,23 @@
     hostCandidate = [hostCandidate substringToIndex:delimiterRange.location];
   }
 
+  NSURLComponents *components = [NSURLComponents componentsWithString:[@"http://" stringByAppendingString:hostCandidate]];
+  if ([components.host.lowercaseString isEqualToString:@"localhost"]) {
+    return YES;
+  }
+
   return [hostCandidate containsString:@"."];
+}
+
+- (BOOL)shouldUseHTTPForBareHost:(NSString *)value {
+  NSString *hostCandidate = value;
+  NSRange delimiterRange = [hostCandidate rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"/?#"]];
+  if (delimiterRange.location != NSNotFound) {
+    hostCandidate = [hostCandidate substringToIndex:delimiterRange.location];
+  }
+
+  NSURLComponents *components = [NSURLComponents componentsWithString:[@"http://" stringByAppendingString:hostCandidate]];
+  return [components.host.lowercaseString isEqualToString:@"localhost"];
 }
 
 - (BOOL)shouldTreatAsWebURLComponents:(NSURLComponents *)components {

@@ -23,6 +23,8 @@ constexpr CGFloat kWindowControlOffset = 5.0;
 constexpr CGFloat kLocationFieldCornerRadius = 6.0;
 constexpr CGFloat kLocationFieldHorizontalPadding = 10.0;
 constexpr CGFloat kMouseDragThreshold = 4.0;
+constexpr CGFloat kTabCloseButtonSize = 18.0;
+constexpr CGFloat kTabCloseButtonRightPadding = 5.0;
 
 BOOL EventMovedPastDragThreshold(NSEvent *event, NSPoint startPoint) {
   CGFloat deltaX = event.locationInWindow.x - startPoint.x;
@@ -135,14 +137,44 @@ BOOL WindowPointIsInsideView(NSView *view, NSPoint windowPoint) {
 @interface TabButton : NSButton
 
 @property(nonatomic, weak) id<TabDragDelegate> dragDelegate;
+@property(nonatomic, strong) NSButton *closeButton;
 
 @end
 
 @implementation TabButton
 
+- (instancetype)initWithFrame:(NSRect)frameRect {
+  self = [super initWithFrame:frameRect];
+  if (!self) {
+    return nil;
+  }
+
+  _closeButton = [[NSButton alloc] initWithFrame:NSZeroRect];
+  _closeButton.title = @"x";
+  _closeButton.font = [NSFont systemFontOfSize:11 weight:NSFontWeightSemibold];
+  _closeButton.bezelStyle = NSBezelStyleInline;
+  _closeButton.bordered = NO;
+  _closeButton.target = self;
+  _closeButton.action = @selector(closeTab:);
+  _closeButton.toolTip = @"Close Tab";
+  [self addSubview:_closeButton];
+
+  return self;
+}
+
 - (BOOL)acceptsFirstMouse:(NSEvent *)event {
   (void)event;
   return YES;
+}
+
+- (void)layout {
+  [super layout];
+  CGFloat x = NSWidth(self.bounds) - kTabCloseButtonRightPadding - kTabCloseButtonSize;
+  CGFloat y = floor((NSHeight(self.bounds) - kTabCloseButtonSize) / 2.0);
+  self.closeButton.frame = NSMakeRect(MAX(kTabCloseButtonRightPadding, x),
+                                      y,
+                                      kTabCloseButtonSize,
+                                      kTabCloseButtonSize);
 }
 
 - (void)resetCursorRects {
@@ -150,6 +182,11 @@ BOOL WindowPointIsInsideView(NSView *view, NSPoint windowPoint) {
   if (self.enabled && self.dragDelegate) {
     [self addCursorRect:self.bounds cursor:NSCursor.pointingHandCursor];
   }
+}
+
+- (void)closeTab:(id)sender {
+  (void)sender;
+  [self.dragDelegate closeTabAtIndex:self.tag];
 }
 
 - (void)mouseDown:(NSEvent *)event {
@@ -273,18 +310,14 @@ BOOL WindowPointIsInsideView(NSView *view, NSPoint windowPoint) {
 }
 
 - (void)selectAllText {
-  [self selectText:nil];
   NSText *editor = self.currentEditor;
+  if (!editor) {
+    [self selectText:nil];
+    editor = self.currentEditor;
+  }
   if (editor) {
     [editor setSelectedRange:NSMakeRange(0, self.stringValue.length)];
   }
-}
-
-- (void)selectAllTextSoon {
-  __weak LocationTextField *weakSelf = self;
-  dispatch_async(dispatch_get_main_queue(), ^{
-    [weakSelf selectAllText];
-  });
 }
 
 - (BOOL)allowsVibrancy {
@@ -301,27 +334,19 @@ BOOL WindowPointIsInsideView(NSView *view, NSPoint windowPoint) {
   return YES;
 }
 
-- (BOOL)becomeFirstResponder {
-  BOOL didBecomeFirstResponder = [super becomeFirstResponder];
-  if (didBecomeFirstResponder) {
-    [self selectAllTextSoon];
-  }
-  return didBecomeFirstResponder;
-}
-
 - (BOOL)mouseDownCanMoveWindow {
   return NO;
 }
 
 - (void)mouseDown:(NSEvent *)event {
   BOOL wasEditing = self.currentEditor && self.window.firstResponder == self.currentEditor;
-  [self.window makeFirstResponder:self];
-  [super mouseDown:event];
   if (wasEditing) {
+    [super mouseDown:event];
     return;
   }
 
-  [self selectAllTextSoon];
+  [self.window makeFirstResponder:self];
+  [self selectAllText];
 }
 
 - (BOOL)performKeyEquivalent:(NSEvent *)event {
@@ -779,8 +804,11 @@ BOOL WindowPointIsInsideView(NSView *view, NSPoint windowPoint) {
 }
 
 - (void)selectAllLocationText {
-  [self.locationField selectText:nil];
   NSText *editor = self.locationField.currentEditor;
+  if (!editor) {
+    [self.locationField selectText:nil];
+    editor = self.locationField.currentEditor;
+  }
   if (editor) {
     [editor setSelectedRange:NSMakeRange(0, self.locationField.stringValue.length)];
   }
@@ -837,16 +865,6 @@ doCommandBySelector:(SEL)commandSelector {
   }
 
   return NO;
-}
-
-- (void)controlTextDidBeginEditing:(NSNotification *)notification {
-  if (notification.object != self.locationField) {
-    return;
-  }
-
-  dispatch_async(dispatch_get_main_queue(), ^{
-    [self selectAllLocationText];
-  });
 }
 
 - (void)controlTextDidEndEditing:(NSNotification *)notification {
